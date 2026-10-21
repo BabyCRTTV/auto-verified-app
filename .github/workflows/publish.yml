@@ -1,0 +1,67 @@
+name: Build app and publish
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['web/inventory.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate app
+        run: |
+          node --check web/app.js
+          python -m unittest discover -s tests
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - uses: actions/deploy-pages@v4
+        id: deploy
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Preserve development signing identity
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: auto-verified-development-signing-v1
+      - name: Build installable APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - name: Package Android app
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Auto-Verified-1.0.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Auto-Verified-Android
+          path: Auto-Verified-1.0.0.apk
+      - name: Publish APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view v1.0.0; then
+            gh release create v1.0.0 --title "Auto Verified 1.0.0" --notes-file RELEASE_NOTES.md
+          fi
+          gh release upload v1.0.0 Auto-Verified-1.0.0.apk --clobber
