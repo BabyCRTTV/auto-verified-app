@@ -13,7 +13,7 @@ Search real inventory, filter by body style/make/budget/mileage, sort results, s
 
 Android's **Sync new inventory** button reads the public dealership inventory and vehicle pages directly over HTTPS. It replaces inventory only after the complete import succeeds. New, changed, and removed listings are reflected. A cached feed is bundled for first launch; the last good inventory is retained offline. Saved IDs are kept locally, and vehicles no longer in inventory disappear from active saved results.
 
-The static browser app reloads `inventory.json`. A scheduled GitHub Actions task checks the dealership hourly and republishes the feed, and can be run manually from Actions. GitHub schedules can be delayed. Browser sync does not trigger that job or bypass cross-origin restrictions. The inventory timestamp indicates source freshness, not the time the sync button was tapped.
+Android 1.0.1 also tries the published GitHub Pages inventory feed if the dealership blocks a direct mobile request; an older feed cannot replace newer saved data. Inventory more than 48 hours old is marked delayed. The static browser app reloads `inventory.json`. A scheduled GitHub Actions task checks the dealership hourly and republishes the feed, and can be run manually from Actions. GitHub schedules can be delayed. Browser sync does not trigger that job or bypass cross-origin restrictions. The inventory timestamp indicates source freshness, not the time the sync button was tapped.
 
 The parser fails on an empty feed, duplicate stock IDs, or a mismatched advertised listing count. Pagination or a dealer redesign may require a parser update. Prices use the dealer's `data-total-price` field, including the displayed dealer processing fees. Additional taxes/title/registration are disclosed. No valuations or availability claims are invented.
 
@@ -27,7 +27,7 @@ Only INTERNET permission is requested. The native bridge accepts HTTPS inventory
 
 ## Signing and distribution
 
-The first release is a signed **development APK**, suitable for direct testing, not a production Play Store submission. Actions caches the development signing key for subsequent builds; caches can expire, so production updates must migrate to a securely backed-up release signing key in GitHub Actions secrets before wider distribution. If the development key is lost, Android requires uninstalling the old development build before installing a differently signed build. Export saved items before uninstalling if needed (there is no export UI in 1.0).
+Releases 1.0.0 and 1.0.1 use a **development APK**, suitable for direct testing, not a production Play Store submission. Actions caches the development signing key for subsequent builds; caches can expire, so production updates must migrate to a securely backed-up release signing key in GitHub Actions secrets before wider distribution. If the development key is lost, Android requires uninstalling the old development build before installing a differently signed build. Export saved items before uninstalling if needed (there is no export UI in 1.0).
 
 Vehicle data, photos and dealership branding remain the property of their respective owners. This project does not modify the dealership website or imply dealership endorsement.
 

@@ -1,12 +1,13 @@
-Auto Verified 1.0.0 brings the dealership's inventory to your pocket.
+Auto Verified 1.0.1 improves refresh reliability and identifies delayed inventory updates.
 
-- Real vehicle photos, prices including dealer fees, and specifications.
-- Direct inventory sync in Android, with the last good inventory retained if connection fails.
-- Search, body-style filters, make, price, mileage, and sorting.
-- Saved vehicles stored on your device and comparison for up to three cars.
-- Photo galleries, dealership listing links, and call/text test-drive enquiries.
-- Android 8.0 or newer. Internet permission only.
+- Android reads the dealership inventory directly, then falls back to the published inventory feed if the website rejects direct access.
+- Cached inventory is preserved if a newer feed is unavailable; older feeds cannot replace newer cached data.
+- The app visibly marks outdated inventory instead of claiming old listings are current.
+- The Android native bridge still accepts only verified dealership inventory URLs and a single GitHub Pages JSON resource.
+- Search, filters, saved vehicles, comparison, galleries and contact links remain intact.
 
-Download **Auto-Verified-1.0.0.apk** below. This is a signed development APK for direct installation, not a Play Store release. Android may ask you to allow installation from your browser. No account is required.
+Download **Auto-Verified-1.0.1.apk** below. This remains a development-signed APK for direct installation. It should update 1.0.0 only if the cached development signing key was preserved.
 
-The browser version reloads a published feed refreshed hourly by GitHub Actions. Android checks the dealership website directly. Always confirm final price and availability with the dealer.
+NOTE: The website still returns HTTP 403 to GitHub-hosted automation. Automatic feed updates need a dealer-authorized DealerCenter CSV or JSON source configured through the AUTO_VERIFIED_FEED_URL Actions secret, or restored authorized access. This release does not claim to have refreshed the blocked feed.
+
+Always confirm final vehicle prices and availability with the dealership.

@@ -8,6 +8,8 @@ const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fa
 const write=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value))}catch{}};
 let data=read('av-inventory',null),cars=[],saved=new Set(read('av-saved',[])),compare=new Set(),view='inventory',body='',activeCar=null,toastTimer,reqSeq=0;
 const nativeRequests=new Map();
+const PUBLISHED_FEED='https://babycrttv.github.io/auto-verified-app/inventory.json';
+const STALE_AFTER_MS=48*60*60*1000;
 window.onNativeResponse=(id,html,error)=>{const pending=nativeRequests.get(id);if(!pending)return;clearTimeout(pending.timer);nativeRequests.delete(id);error?pending.reject(new Error(error)):pending.resolve(html)};
 function nativeFetch(url){return new Promise((resolve,reject)=>{const id=String(++reqSeq);const timer=setTimeout(()=>{nativeRequests.delete(id);reject(new Error('Connection timed out'))},50000);nativeRequests.set(id,{resolve,reject,timer});AndroidInventory.request(id,url)})}
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),4500)}
@@ -35,15 +37,26 @@ function enrich(car,html){
  return car;
 }
 function validate(feed){if(!feed||!Array.isArray(feed.vehicles)||!feed.vehicles.length||!Number.isFinite(Date.parse(feed.syncedAt)))throw Error('Invalid inventory feed');const ids=new Set();for(const c of feed.vehicles){if(!c.id||ids.has(c.id)||!c.name||!safeUrl(c.url).startsWith('https://www.carsforyouva.com/inventory/')||!safeUrl(c.image)||(c.price!==null&&(!Number.isFinite(c.price)||c.price<0)))throw Error('Invalid vehicle data');ids.add(c.id)}return feed}
-function apply(feed){data=validate(feed);cars=data.vehicles;write('av-inventory',data);const makes=[...new Set(cars.map(c=>c.make).filter(Boolean))].sort();const old=$('#make').value;$('#make').innerHTML='<option value="">All makes</option>'+makes.map(m=>`<option>${esc(m)}</option>`).join('');$('#make').value=makes.includes(old)?old:'';const hero=cars.find(c=>c.model?.toLowerCase()==='panamera')||cars[0];$('#hero-image').src=hero.image;$('#hero-title').textContent=hero.name;$('#hero-open').onclick=()=>openDetail(hero.id);const date=new Date(data.syncedAt);$('#sync-time').textContent=`Inventory checked ${date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}, ${date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;$('#sync-time').title=window.AndroidInventory?'Direct from the dealership website':'Browser feed is refreshed hourly. Sync reloads the latest published feed.';render()}
+function apply(feed){data=validate(feed);cars=data.vehicles;write('av-inventory',data);const makes=[...new Set(cars.map(c=>c.make).filter(Boolean))].sort();const old=$('#make').value;$('#make').innerHTML='<option value="">All makes</option>'+makes.map(m=>`<option>${esc(m)}</option>`).join('');$('#make').value=makes.includes(old)?old:'';const hero=cars.find(c=>c.model?.toLowerCase()==='panamera')||cars[0];$('#hero-image').src=hero.image;$('#hero-title').textContent=hero.name;$('#hero-open').onclick=()=>openDetail(hero.id);const date=new Date(data.syncedAt),stale=Date.now()-date.getTime()>STALE_AFTER_MS;$('#sync-time').textContent=`${stale?'Inventory update delayed · last checked':'Inventory checked'} ${date.toLocaleDateString('en-US',{month:'short',day:'numeric'})}, ${date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;$('#sync-time').title=data.delivery==='published'||!window.AndroidInventory?'Last verified dealership data from the published inventory feed':'Directly checked against the dealership website';render()}
 async function sync(initial=false){
  const btn=$('#sync');btn.disabled=true;btn.querySelector('#sync-icon').textContent='◌';
  try{
   let feed;
-  if(window.AndroidInventory){const listing=await nativeFetch('https://www.carsforyouva.com/inventory/');const fresh=parseListing(listing);for(let i=0;i<fresh.length;i+=3){await Promise.all(fresh.slice(i,i+3).map(async c=>enrich(c,await nativeFetch(c.url))))}feed={source:'https://www.carsforyouva.com/inventory/',syncedAt:new Date().toISOString(),vehicles:fresh}}
+  if(window.AndroidInventory){
+   try{
+    const listing=await nativeFetch('https://www.carsforyouva.com/inventory/');
+    const fresh=parseListing(listing);
+    for(let i=0;i<fresh.length;i+=3){await Promise.all(fresh.slice(i,i+3).map(async c=>enrich(c,await nativeFetch(c.url))))}
+    feed={source:'https://www.carsforyouva.com/inventory/',syncedAt:new Date().toISOString(),vehicles:fresh};
+   }catch(directError){
+    // The dealer may reject on-device requests. Read the independently published feed instead.
+    feed=JSON.parse(await nativeFetch(PUBLISHED_FEED));
+    feed.delivery='published';
+   }
+  }
   else{const response=await fetch(`inventory.json?t=${Date.now()}`,{cache:'no-store',signal:AbortSignal.timeout(30000)});if(!response.ok)throw Error('Inventory feed unavailable');feed=await response.json()}
-  validate(feed);const oldIds=new Set(cars.map(c=>c.id));const added=feed.vehicles.filter(c=>!oldIds.has(c.id)).length;const changed=cars.filter(c=>{const n=feed.vehicles.find(x=>x.id===c.id);return n&&n.price!==c.price}).length;const removed=cars.filter(c=>!feed.vehicles.some(x=>x.id===c.id)).length;apply(feed);
-  if(!initial)toast(added||changed||removed?`Synced: ${added} added · ${changed} price updates · ${removed} no longer listed.`:'You’re up to date. No inventory changes.');
+  validate(feed);if(data&&Date.parse(feed.syncedAt)<Date.parse(data.syncedAt)){if(!initial)toast('Published inventory is older than your saved copy. Keeping the newer inventory.');return}const oldIds=new Set(cars.map(c=>c.id));const added=feed.vehicles.filter(c=>!oldIds.has(c.id)).length;const changed=cars.filter(c=>{const n=feed.vehicles.find(x=>x.id===c.id);return n&&n.price!==c.price}).length;const removed=cars.filter(c=>!feed.vehicles.some(x=>x.id===c.id)).length;apply(feed);
+  if(!initial)toast(Date.now()-Date.parse(feed.syncedAt)>STALE_AFTER_MS?'Inventory update delayed. Showing the last verified listings.':added||changed||removed?`Synced: ${added} added · ${changed} price updates · ${removed} no longer listed.`:'You’re up to date. No inventory changes.');
  }catch(e){if(!cars.length){$('#result-count').textContent='Inventory unavailable';$('#empty').hidden=false;$('#empty-copy').textContent='Please check your connection and tap Sync new inventory.';$('#sync-time').textContent='Not synced yet'}toast(cars.length?'Couldn’t sync. Your last saved inventory is still available.':'Couldn’t load inventory. Please try syncing again.')}finally{btn.disabled=false;btn.querySelector('#sync-icon').textContent='↻'}
 }
 function filtered(){const q=$('#search').value.trim().toLowerCase(),make=$('#make').value,price=Number($('#price').value),miles=Number($('#miles').value);return cars.filter(c=>(view!=='saved'||saved.has(c.id))&&(!body||(c.body||'').toLowerCase()===body.toLowerCase())&&(!make||c.make===make)&&(!price||(c.price!=null&&c.price<price))&&(!miles||(typeof c.mileage==='number'&&c.mileage<miles))&&(!q||[c.name,c.id,c.vin,c.trim,c.body].join(' ').toLowerCase().includes(q))).sort((a,b)=>{switch($('#sort').value){case'price-low':return (a.price??Infinity)-(b.price??Infinity);case'price-high':return (b.price??-1)-(a.price??-1);case'miles':return (a.mileage||Infinity)-(b.mileage||Infinity);case'year':return b.year-a.year;default:return (b.year-a.year)||((a.mileage||Infinity)-(b.mileage||Infinity))}})}

@@ -53,16 +53,16 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon
       - name: Package Android app
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Auto-Verified-1.0.0.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Auto-Verified-1.0.1.apk
       - uses: actions/upload-artifact@v4
         with:
           name: Auto-Verified-Android
-          path: Auto-Verified-1.0.0.apk
+          path: Auto-Verified-1.0.1.apk
       - name: Publish APK download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view v1.0.0; then
-            gh release create v1.0.0 --title "Auto Verified 1.0.0" --notes-file RELEASE_NOTES.md
+          if ! gh release view v1.0.1; then
+            gh release create v1.0.1 --title "Auto Verified 1.0.1" --notes-file RELEASE_NOTES.md
           fi
-          gh release upload v1.0.0 Auto-Verified-1.0.0.apk --clobber
+          gh release upload v1.0.1 Auto-Verified-1.0.1.apk --clobber

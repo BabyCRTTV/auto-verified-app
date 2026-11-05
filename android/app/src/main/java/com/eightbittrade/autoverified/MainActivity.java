@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
  private WebView web;
  private final ExecutorService pool=Executors.newFixedThreadPool(3);
  private static final String LOCAL="https://appassets.androidplatform.net/";
+ private String deviceUserAgent;
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
   getWindow().setStatusBarColor(Color.rgb(246,247,243));
@@ -27,7 +28,7 @@ public class MainActivity extends Activity {
   FrameLayout root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(246,247,243));
   root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
   web=new WebView(this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-  WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSupportMultipleWindows(false);
+  WebSettings settings=web.getSettings();deviceUserAgent=settings.getUserAgentString();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setSupportMultipleWindows(false);
   CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.addJavascriptInterface(new InventoryBridge(),"AndroidInventory");
   web.setWebViewClient(new WebViewClient(){
@@ -51,13 +52,15 @@ public class MainActivity extends Activity {
    pool.execute(()->{String result=null,error=null;HttpURLConnection conn=null;
     try{
      URL target=new URL(url);
-     if(!"https".equals(target.getProtocol())||!"www.carsforyouva.com".equals(target.getHost())||!target.getPath().startsWith("/inventory/")||target.getUserInfo()!=null||(target.getPort()!=-1&&target.getPort()!=443))throw new IOException("Invalid inventory address");
-     conn=(HttpURLConnection)target.openConnection();conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(25000);conn.setRequestProperty("User-Agent","AutoVerifiedInventory/1.0 (+public inventory reader)");
-     if(conn.getResponseCode()!=200)throw new IOException("Dealership inventory is unavailable");
+     boolean dealer="www.carsforyouva.com".equals(target.getHost())&&target.getPath().startsWith("/inventory/");
+     boolean published="babycrttv.github.io".equals(target.getHost())&&"/auto-verified-app/inventory.json".equals(target.getPath())&&target.getQuery()==null&&target.getRef()==null;
+     if(!"https".equals(target.getProtocol())||!(dealer||published)||target.getUserInfo()!=null||(target.getPort()!=-1&&target.getPort()!=443))throw new IOException("Invalid inventory address");
+     conn=(HttpURLConnection)target.openConnection();conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(25000);conn.setRequestProperty("User-Agent",deviceUserAgent);conn.setRequestProperty("Accept",published?"application/json":"text/html");
+     if(conn.getResponseCode()!=200)throw new IOException("Inventory source is unavailable");
      try(InputStream input=conn.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()){
       byte[] buffer=new byte[16384];int read;while((read=input.read(buffer))!=-1){output.write(buffer,0,read);if(output.size()>8000000)throw new IOException("Inventory response too large");}result=new String(output.toByteArray(),StandardCharsets.UTF_8);
      }
-    }catch(Exception ex){error="Unable to reach the dealership. Please try again.";}finally{if(conn!=null)conn.disconnect();}
+    }catch(Exception ex){error="Unable to reach the inventory source. Please try again.";}finally{if(conn!=null)conn.disconnect();}
     final String script="window.onNativeResponse("+JSONObject.quote(id)+","+(result==null?"null":JSONObject.quote(result))+","+(error==null?"null":JSONObject.quote(error))+");";
     runOnUiThread(()->{if(!isFinishing()&&web.getUrl()!=null&&web.getUrl().startsWith(LOCAL))web.evaluateJavascript(script,null);});
    });
