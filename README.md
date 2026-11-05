@@ -30,3 +30,13 @@ Only INTERNET permission is requested. The native bridge accepts HTTPS inventory
 The first release is a signed **development APK**, suitable for direct testing, not a production Play Store submission. Actions caches the development signing key for subsequent builds; caches can expire, so production updates must migrate to a securely backed-up release signing key in GitHub Actions secrets before wider distribution. If the development key is lost, Android requires uninstalling the old development build before installing a differently signed build. Export saved items before uninstalling if needed (there is no export UI in 1.0).
 
 Vehicle data, photos and dealership branding remain the property of their respective owners. This project does not modify the dealership website or imply dealership endorsement.
+
+## Dealer-authorized feed (recommended)
+
+GitHub-hosted inventory refresh requests currently receive HTTP 403 from the dealership even with normal HTML request headers. The durable solution is a dealer-approved complete HTTPS CSV or JSON inventory export. Ask the Auto Verified DealerCenter administrator or DealerCenter support for an export intended for this app. Do not put private feed URLs or tokens into repository files.
+
+Add the authorized HTTPS URL as a GitHub Actions repository secret named AUTO_VERIFIED_FEED_URL. The hourly inventory workflow will then import from that source instead of the blocked dealership HTML page. Without the secret, the original site reader remains active.
+
+The importer accepts a CSV with column headers or JSON arrays / an object containing a vehicles array. Every car needs a unique stock ID, year, make, model, full https://www.carsforyouva.com/inventory/ listing URL, and HTTPS image. Optional columns include mileage, VIN, trim, engine, transmission, drivetrain, color, body style and pipe-separated photo_urls. Price fields must be fee-inclusive: provide total_price, price_including_fees, or both internet_price and dealer_fee. If the export has only a base price, the app will display Call for price rather than misrepresent it as fee-inclusive.
+
+Supply the entire active inventory with each export. Empty, duplicate, malformed, or invalid records fail before replacing the saved feed. The Android direct website importer remains a separate path.

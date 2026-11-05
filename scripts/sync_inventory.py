@@ -57,9 +57,104 @@ def enrich(car):
     m=re.search(r'id="DWS_Vehicle_Media_Button_Settings_image">(.*?)</script>',s,re.S)
     car['photos']=json.loads(m[1]).get('img_urls',[])[:35] if m else [car['image']]
     return car
+
+def _value(row, *aliases):
+    fields = {re.sub(r'[^a-z0-9]', '', str(k).lower()): v for k, v in row.items()}
+    for alias in aliases:
+        v = fields.get(re.sub(r'[^a-z0-9]', '', alias.lower()))
+        if v is not None and str(v).strip():
+            return v
+    return ''
+
+def _money(value):
+    return float(re.sub(r'[$, ]', '', str(value))) if str(value).strip() else None
+
+def parse_authorized_feed(content):
+    """Read a dealer-authorized full CSV or JSON export, not website HTML."""
+    import csv
+    import io
+    content = content.lstrip('\ufeff').strip()
+    if content.startswith(('{', '[')):
+        document = json.loads(content)
+        rows = document if isinstance(document, list) else document.get('vehicles', [])
+    else:
+        rows = list(csv.DictReader(io.StringIO(content)))
+    if not isinstance(rows, list) or not rows:
+        raise ValueError('Approved feed is empty or not a vehicle list')
+    cars = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError('Approved feed contains a non-vehicle record')
+        stock = str(_value(row, 'id', 'stock', 'stock_number', 'stock_no', 'stocknumber')).strip()
+        url = str(_value(row, 'url', 'listing_url', 'vehicle_url', 'detail_url')).strip()
+        image = str(_value(row, 'image', 'image_url', 'primary_image', 'main_photo')).strip()
+        year_raw = _value(row, 'year', 'model_year')
+        make = clean(str(_value(row, 'make'))).title()
+        model = clean(str(_value(row, 'model'))).title()
+        year = int(year_raw) if str(year_raw).strip().isdigit() else 0
+        name = clean(str(_value(row, 'name', 'title'))) or f'{year} {make} {model}'
+        if not stock or not year or not make or not model:
+            raise ValueError('Approved feed is missing stock ID, year, make, or model')
+        if not url.startswith(BASE + '/inventory/') or not image.startswith('https://'):
+            raise ValueError('Approved feed is missing a valid dealership URL or image')
+        total = _money(_value(row, 'total_price', 'price_including_fees', 'price_with_fees', 'advertised_total_price'))
+        if total is None:
+            base = _money(_value(row, 'internet_price', 'selling_price', 'price'))
+            fee = _money(_value(row, 'dealer_fee', 'processing_fee', 'dealer_processing_fee'))
+            if base is not None and fee is not None: total = base + fee
+        if total is not None and total < 0: raise ValueError('Negative vehicle price')
+        mileage_raw = re.sub(r'\D', '', str(_value(row, 'mileage', 'miles', 'odometer')))
+        photos_raw = _value(row, 'photos', 'photo_urls', 'image_urls')
+        if isinstance(photos_raw, list):
+            photos = photos_raw
+        else:
+            photos = re.split(r'[|;]', str(photos_raw)) if photos_raw else []
+        photos = [str(p).strip() for p in photos if str(p).strip().startswith('https://')]
+        if image not in photos: photos.insert(0, image)
+        cars.append(dict(
+            id=stock, name=name.title(), url=url, year=year, price=total, image=image,
+            trim=clean(str(_value(row, 'trim', 'style'))).title(),
+            mileage=int(mileage_raw) if mileage_raw else None,
+            engine=clean(str(_value(row, 'engine'))),
+            transmission=clean(str(_value(row, 'transmission'))),
+            drivetrain=clean(str(_value(row, 'drivetrain', 'drive_type'))),
+            color=clean(str(_value(row, 'exterior_color', 'color'))),
+            vin=clean(str(_value(row, 'vin'))),
+            make=make, model=model,
+            body=clean(str(_value(row, 'body', 'body_style', 'body_type'))).title() or 'Other',
+            photos=photos[:35]
+        ))
+    if len({c['id'] for c in cars}) != len(cars):
+        raise ValueError('Approved feed contains duplicate stock IDs')
+    return cars
+
+def fetch_authorized_feed(url):
+    """The authorized feed URL is supplied privately through GitHub Actions secrets."""
+    from urllib.parse import urlsplit
+    target = urlsplit(url)
+    if target.scheme != 'https' or not target.hostname or target.username or target.password:
+        raise ValueError('Approved inventory feed URL must use HTTPS')
+    try:
+        request = urllib.request.Request(url, headers={'Accept': 'application/json,text/csv'})
+        with urllib.request.urlopen(request, timeout=45) as response:
+            final = urlsplit(response.geturl())
+            if final.scheme != 'https' or final.hostname != target.hostname:
+                raise ValueError('Approved feed redirected to a different host')
+            raw = response.read(8_000_001)
+            if len(raw) > 8_000_000:
+                raise ValueError('Approved feed response is too large')
+            return raw.decode('utf-8-sig')
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        raise RuntimeError('Approved inventory feed was unavailable; retained last good inventory') from None
+
 if __name__=='__main__':
-    cars=parse_listing(fetch(BASE+'/inventory/'))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool: cars=list(pool.map(enrich,cars))
+    import os
+    approved_url = os.environ.get('AUTO_VERIFIED_FEED_URL', '').strip()
+    if approved_url:
+        cars = parse_authorized_feed(fetch_authorized_feed(approved_url))
+    else:
+        cars = parse_listing(fetch(BASE+'/inventory/'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool: cars=list(pool.map(enrich,cars))
     data=dict(source=BASE+'/inventory/',syncedAt=datetime.datetime.now(datetime.timezone.utc).isoformat(),vehicles=cars)
     target=ROOT/'web/inventory.json'; tmp=target.with_suffix('.tmp'); tmp.write_text(json.dumps(data,indent=2)); tmp.replace(target)
     print(f'Synced {len(cars)} vehicles')
