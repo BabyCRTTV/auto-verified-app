@@ -1,6 +1,7 @@
 import json, pathlib, sys, unittest
+from unittest.mock import MagicMock, patch
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
-from sync_inventory import parse_listing, field
+from sync_inventory import parse_listing, field, fetch, BASE
 class InventoryTests(unittest.TestCase):
  def test_fee_inclusive_price(self):
   html='''<div data-vehicle-id="vehicle-id-X"><span data-sn="STOCK1"></span><a class="vehicle-title" href="https://www.carsforyouva.com/inventory/a/b/stock1/">2016 HONDA TEST</a><span data-carmojo-primary-image-url="https://example.com/car.jpg"></span><span data-vehicle-price="10000" data-total-price="10599"></span><label>Trim: </label> EX </div> 1 Available Vehicles'''
@@ -12,6 +13,18 @@ class InventoryTests(unittest.TestCase):
   with self.assertRaises(ValueError):parse_listing(html)
  def test_mileage_field(self):
   self.assertEqual(field('<span class="vehicle-label">Mileage</span> <span class="vehicle-value">65,809 mi</span>','Mileage'),'65,809 mi')
+ def test_fetch_uses_html_headers_and_checks_redirect(self):
+  response=MagicMock()
+  response.__enter__.return_value.read.return_value=b'<html>Public inventory</html>'
+  response.__enter__.return_value.geturl.return_value=BASE+'/inventory/'
+  with patch('urllib.request.urlopen',return_value=response) as opener:
+   self.assertEqual(fetch(BASE+'/inventory/'),'<html>Public inventory</html>')
+   request=opener.call_args.args[0]
+   self.assertIn('Mozilla/5.0',request.get_header('User-agent'))
+   self.assertIn('text/html',request.get_header('Accept'))
+  response.__enter__.return_value.geturl.return_value='https://other.example/inventory/'
+  with patch('urllib.request.urlopen',return_value=response):
+   with self.assertRaises(ValueError):fetch(BASE+'/inventory/')
  def test_live_snapshot(self):
   feed=json.loads((pathlib.Path(__file__).resolve().parents[1]/'web/inventory.json').read_text());self.assertGreater(len(feed['vehicles']),0)
   self.assertEqual(len({c['id'] for c in feed['vehicles']}),len(feed['vehicles']))

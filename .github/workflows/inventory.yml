@@ -1,5 +1,11 @@
 name: Refresh dealership inventory
 on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/sync_inventory.py
+      - tests/test_inventory.py
+      - .github/workflows/inventory.yml
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -18,6 +24,8 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate inventory parser
+        run: python -m unittest discover -s tests
       - name: Refresh inventory from dealership
         run: python scripts/sync_inventory.py
       - name: Save updated inventory

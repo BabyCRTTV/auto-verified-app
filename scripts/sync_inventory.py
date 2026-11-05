@@ -1,11 +1,30 @@
 """Read the dealership's public inventory. Never overwrite a good feed on failure."""
-import concurrent.futures, datetime, html, json, pathlib, re, urllib.request
+import concurrent.futures, datetime, html, json, pathlib, re, urllib.error, urllib.request
 BASE = 'https://www.carsforyouva.com'
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+# Use standard HTML request headers. The dealership may reject custom bot user agents.
+REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
 def fetch(url):
     if not url.startswith(BASE + '/inventory/'): raise ValueError('Unexpected inventory URL')
-    req=urllib.request.Request(url, headers={'User-Agent':'AutoVerifiedInventory/1.0 (+public inventory reader)'})
-    with urllib.request.urlopen(req, timeout=45) as r: return r.read().decode('utf-8')
+    req = urllib.request.Request(url, headers=REQUEST_HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            # Never import from an unexpected URL following a redirect.
+            if not response.geturl().startswith(BASE + '/inventory/'):
+                raise ValueError('Dealership redirected inventory outside approved URL')
+            return response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        if exc.code == 403:
+            raise RuntimeError(
+                'Dealer website returned HTTP 403 to the scheduled inventory reader. '
+                'The dealership/DealerCenter must allow this integration or provide an approved inventory feed.'
+            ) from exc
+        raise
 def clean(v): return html.unescape(re.sub('<[^>]+>', '', v)).strip()
 def field(s, name):
     m=re.search(r'<span[^>]*class="vehicle-label"[^>]*>\s*'+re.escape(name)+r'\s*</span>\s*<span[^>]*class="vehicle-value"[^>]*>(.*?)</span>',s,re.S|re.I)
