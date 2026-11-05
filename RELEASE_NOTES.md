@@ -1,13 +1,14 @@
-Auto Verified 1.0.1 improves refresh reliability and identifies delayed inventory updates.
+Auto Verified 1.0.2 temporarily pauses automatic inventory refresh attempts while dealership feed access is being arranged.
 
-- Android reads the dealership inventory directly, then falls back to the published inventory feed if the website rejects direct access.
-- Cached inventory is preserved if a newer feed is unavailable; older feeds cannot replace newer cached data.
-- The app visibly marks outdated inventory instead of claiming old listings are current.
-- The Android native bridge still accepts only verified dealership inventory URLs and a single GitHub Pages JSON resource.
-- Search, filters, saved vehicles, comparison, galleries and contact links remain intact.
+- Android no longer automatically requests dealership inventory on app launch.
+- The existing **Sync new inventory** button remains available for manual checks.
+- Saved and bundled vehicle listings remain available even when syncing is unavailable.
+- Out-of-date inventory is identified rather than passed off as newly checked.
+- The GitHub Actions inventory workflow has no hourly schedule and no push trigger, but can be run manually.
+- Vehicle search, saved listings, comparison, galleries and contact functions remain.
 
-Download **Auto-Verified-1.0.1.apk** below. This remains a development-signed APK for direct installation. It should update 1.0.0 only if the cached development signing key was preserved.
+Download **Auto-Verified-1.0.2.apk** below. This remains a development-signed APK, and upgrades require the original development signing key to have been preserved.
 
-NOTE: The website still returns HTTP 403 to GitHub-hosted automation. Automatic feed updates need a dealer-authorized DealerCenter CSV or JSON source configured through the AUTO_VERIFIED_FEED_URL Actions secret, or restored authorized access. This release does not claim to have refreshed the blocked feed.
+To restore automatic refresh, Auto Verified or DealerCenter must provide authorized inventory access or a complete approved feed. Configure the private GitHub Actions secret AUTO_VERIFIED_FEED_URL and re-enable the schedule deliberately.
 
-Always confirm final vehicle prices and availability with the dealership.
+Confirm vehicle availability and pricing with the dealership.

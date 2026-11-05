@@ -1,13 +1,7 @@
 name: Refresh dealership inventory
+# Inventory refresh is paused until an authorized dealership feed is configured.
+# Run manually from Actions > Refresh dealership inventory when ready.
 on:
-  push:
-    branches: [main]
-    paths:
-      - scripts/sync_inventory.py
-      - tests/test_inventory.py
-      - .github/workflows/inventory.yml
-  schedule:
-    - cron: '17 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
